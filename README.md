@@ -76,46 +76,41 @@ To prevent the optimization engine from projecting erratic or unbounded solution
 This constraint ensures that all reconstructed trajectories remain strictly within the physical and systemic limits of the tracking plant, rejecting localized network entropy and preventing malformed, out-of-bounds states from ever propagating past the gateway interface.
 
 ### 3.4 Canonical Dimension Reduction
-Once the 4-dimensional state manifold is completely reconstructed and verified at the terminal 12th second, it passes through a static canonical projection matrix (P_12->3) to map the data down to a 3-dimensional physical execution register (d = 3). 
+Once​3.4 Canonical Dimension Reduction via Coordinate Projection
+​Once the 4-dimensional state manifold is completely reconstructed and verified at the terminal 12th second, it passes through a projection matrix (P_{12\to3}) to map the data down to a 3-dimensional physical execution register (d = 3). To preserve strict dimensional homogeneity across different physical units, the state components are non-dimensionalized using characteristic scaling constants prior to projection, ensuring that position, velocity, and acceleration values are not directly summed without appropriate weighting.
+​The transformation is defined via a weighted projection matrix where each row applies a uniform, dimensionless scale to map the hyper-coordinate baseline cleanly into the physical execution space without unit conflicts.
 
-The matrix transformation is defined as follows, where alpha equals pi / 6:
+​3.5 Discrete-Time Linear Time-Varying (LTV) State-Space Formulation
+​To accurately account for the dynamic intervals caused by network transmission anomalies and packet arrival fluctuations, the gateway models the ingestion layer explicitly as a Discrete-Time Linear Time-Varying (LTV) dynamical system.
+​The system state-transition and measurement equations are updated at every time index k to maintain absolute physical consistency:
+S_(k+1) = A_k * S_k + B_k * U_k + W_k
+Z_k     = C * S_k + V_k
 
-Row 1: [ cos(0*alpha) , cos(1*alpha) , cos(2*alpha) , cos(3*alpha) ]  
-Row 2: [ sin(0*alpha) , sin(1*alpha) , sin(2*alpha) , sin(3*alpha) ]  
-Row 3: [ 1.0 , 1.0 , 1.0 , 1.0 ]  
+Where \Delta t_k represents the true, variable elapsed time between incoming packets. The time-varying state-transition matrix A_k and the physically scaled input coupling matrix B_k are rigorously formulated as:
+      [ 1.0  Δt_k  0.5*Δt_k²  0.0       ]
+A_k = [ 0.0  1.0   Δt_k       0.0       ]
+      [ 0.0  0.0   1.0        0.0       ]
+      [ 0.0  0.0   0.0        e^(-γ_k)  ]
 
-This linear reduction condenses the validated tracking data into a compact, standardized 3D matrix, ensuring optimized processing speeds for downstream ledger storage and core backend nodes.
-3.5 Discrete-Time State-Space Formulations
-​To mathematically isolate transmission noise and define the continuous trajectory of the tracking plant across the finite-horizon window, the gateway models the edge ingestion layer as a discrete-time linear time-invariant (LTI) dynamical system.
-​The system dynamics are governed by the primary state-transition and measurement equations:
-S_(k+1) = A * S_k + B * U_k + W_k
-Z_k     = C * S_k + D * U_k + V_k
-Where:
-​S_k: The 4-dimensional hyper-coordinate system tracking vector at time step k.
-​U_k: The deterministic control input vector representing known system adjustments.
-​Z_k: The observed measurement payload arriving at the gateway interface.
-​W_k / V_k: Uncorrelated white noise sequences representing localized processor variance and transmission network jitter.
-​The explicit, system-defined 4x4 state-transition matrix A, input coupling matrix B, and measurement mapping matrix C are defined as:
----    [ 1.0  Δt   0.5*Δt²  0.0    ]
-A = [ 0.0  1.0  Δt       0.0    ]
-    [ 0.0  0.0  1.0      0.0    ]
-    [ 0.0  0.0  0.0      e^(-γ) ]
+      [ 0.5*Δt_k²  0.0 ]
+B_k = [ Δt_k       0.0 ]
+      [ 1.0        0.0 ]
+      [ 0.0        1.0 ]
 
-    [ 0.1  0.0 ]
-B = [ 0.5  0.0 ]
-    [ 1.0  0.0 ]
-    [ 0.0  1.0 ]
-
-C = [ 1.0  0.0  0.0  0.0 ]
+C   = [ 1.0  0.0  0.0  0.0 ]
     [ 0.0  1.0  0.0  0.0 ]
     [ 0.0  0.0  1.0  0.0 ]
     [ 0.0  0.0  0.0  1.0 ]
-The transmission decoupling parameters assume a direct feedthrough matrix where D = [0]. The parameter γ inside matrix A represents a deterministic network damping coefficient derived from real-time tracking network load, ensuring the fourth coordinate stabilizes tracking drift over long operational runtimes.
-​3.6 Edge Jitter Mitigation Equations
-​Compared to conventional data transport layer mechanisms (such as MQTT or Zenoh) that rely on retroactive network retransmissions, the S138 protocol neutralizes temporal network jitter dynamically. Let \tau_k define the erratic packet arrival delay at index k. The gateway applies a temporal correction sequence mapping the true physics timeline to the system baseline:Δt_effective = Δt_nominal + (τ_k - τ_(k-1))
-When a network erasure occurs (State\ Logic = -1), the optimization engine solves the constrained quadratic minimization routine across the underdetermined window by setting the gradient of the kinetic strain cost function exactly to zero with respect to the open tracking variables:∇_S_missing ( Sum || (S_(k+1) - 2*S_k + S_(k-1)) / Δt² ||² ) = [0]
-This mathematical framework collapses the open dimensions, mapping the missing network states back onto a smooth, physically bounded tracking arc without incurring transport layer delays.
+By scaling the elements of B_k directly by \Delta t_k and \frac{1}{2}\Delta t_k^2, the physical behavior of the tracking plant remains completely invariant to changes in the network sampling rate, ensuring true kinematic continuity.
 
+3.6 Finite-Horizon Causality and Delayed Optimization Smoothing
+​The S138 protocol operates on a structured macro-horizon pipeline to ensure strict mathematical causality during network drops. When an erasure event occurs (State\ Logic = -1) within a 3-second localized phase, the gateway handles data ingestion through an asynchronous boundary buffer.
+​Let \tau_k define the packet arrival delay at index k. The effective time step is adjusted dynamically:
+Δt_k = Δt_nominal + (τ_k - τ_(k-1))
+Because calculating a central difference acceleration requires access to adjacent boundary vectors, the optimization engine does not attempt instantaneous, zero-latency calculation mid-drop. Instead, the gateway caches incoming data packets asynchronously. At the terminal 12th second boundary—once the healthy terminal states of Phase 4 are fully received—the system executes a finite-horizon batch smoothing routine.
+​The optimization engine solves for the missing trajectory states simultaneously across the entire underdetermined window by setting the gradient of the kinetic strain cost function to zero:
+
+This structural batch configuration honors physical causality by matching the optimization window to the finite observation horizon. It successfully eliminates transport-layer retransmission overhead by resolving data gaps completely at the ingestion boundary before forwarding the verified data baseline to downstream network nodes.
 ## 4. Formal Technical System Claims
 
 ### Claim 1: A Deterministic Ingress Method for Multi-Variable State-Space Estimation
