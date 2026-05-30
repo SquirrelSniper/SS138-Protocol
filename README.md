@@ -85,8 +85,36 @@ Row 2: [ sin(0*alpha) , sin(1*alpha) , sin(2*alpha) , sin(3*alpha) ]
 Row 3: [ 1.0 , 1.0 , 1.0 , 1.0 ]  
 
 This linear reduction condenses the validated tracking data into a compact, standardized 3D matrix, ensuring optimized processing speeds for downstream ledger storage and core backend nodes.
+3.5 Discrete-Time State-Space Formulations
+​To mathematically isolate transmission noise and define the continuous trajectory of the tracking plant across the finite-horizon window, the gateway models the edge ingestion layer as a discrete-time linear time-invariant (LTI) dynamical system.
+​The system dynamics are governed by the primary state-transition and measurement equations:
+S_(k+1) = A * S_k + B * U_k + W_k
+Z_k     = C * S_k + D * U_k + V_k
+Where:
+​S_k: The 4-dimensional hyper-coordinate system tracking vector at time step k.
+​U_k: The deterministic control input vector representing known system adjustments.
+​Z_k: The observed measurement payload arriving at the gateway interface.
+​W_k / V_k: Uncorrelated white noise sequences representing localized processor variance and transmission network jitter.
+​The explicit, system-defined 4x4 state-transition matrix A, input coupling matrix B, and measurement mapping matrix C are defined as:
+---    [ 1.0  Δt   0.5*Δt²  0.0    ]
+A = [ 0.0  1.0  Δt       0.0    ]
+    [ 0.0  0.0  1.0      0.0    ]
+    [ 0.0  0.0  0.0      e^(-γ) ]
 
----
+    [ 0.1  0.0 ]
+B = [ 0.5  0.0 ]
+    [ 1.0  0.0 ]
+    [ 0.0  1.0 ]
+
+C = [ 1.0  0.0  0.0  0.0 ]
+    [ 0.0  1.0  0.0  0.0 ]
+    [ 0.0  0.0  1.0  0.0 ]
+    [ 0.0  0.0  0.0  1.0 ]
+The transmission decoupling parameters assume a direct feedthrough matrix where D = [0]. The parameter γ inside matrix A represents a deterministic network damping coefficient derived from real-time tracking network load, ensuring the fourth coordinate stabilizes tracking drift over long operational runtimes.
+​3.6 Edge Jitter Mitigation Equations
+​Compared to conventional data transport layer mechanisms (such as MQTT or Zenoh) that rely on retroactive network retransmissions, the S138 protocol neutralizes temporal network jitter dynamically. Let \tau_k define the erratic packet arrival delay at index k. The gateway applies a temporal correction sequence mapping the true physics timeline to the system baseline:Δt_effective = Δt_nominal + (τ_k - τ_(k-1))
+When a network erasure occurs (State\ Logic = -1), the optimization engine solves the constrained quadratic minimization routine across the underdetermined window by setting the gradient of the kinetic strain cost function exactly to zero with respect to the open tracking variables:∇_S_missing ( Sum || (S_(k+1) - 2*S_k + S_(k-1)) / Δt² ||² ) = [0]
+This mathematical framework collapses the open dimensions, mapping the missing network states back onto a smooth, physically bounded tracking arc without incurring transport layer delays.
 
 ## 4. Formal Technical System Claims
 
