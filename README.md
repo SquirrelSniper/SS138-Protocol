@@ -2,7 +2,14 @@
 
 Official Technical Repository for the SS138 Protocol: A Deterministic Finite-Horizon Edge Estimator for Multi-Variable State-Space Trajectory Synchronization.
 
----
+
+SS138 Forensic Protocol
+​Version: 1.0-Stable
+Purpose: Mathematically verified trajectory reconstruction via LTV dynamics.
+Key Features:
+​Deterministic Solving: Hardened scope-locked optimization.
+​Zero-Singularity Math: Corrected tensor mapping for variable data drops.
+​Visual Audit: Integrated trajectory validation and plotting.
 
 # THE SS138 PROTOCOL: A DETERMINISTIC FINITE-HORIZON EDGE ESTIMATOR FOR MULTI-VARIABLE STATE-SPACE TRAJECTORY SYNC
 
