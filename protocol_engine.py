@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 # ==========================================
-# GLOBAL CONFIGURATION (Deterministic Scope)
+# GLOBAL CONFIGURATION
 # ==========================================
 GLOBAL_CHANNELS = 4
 LAMBDA_MAX = 5.0
@@ -12,7 +12,7 @@ LAMBDA_MAX = 5.0
 # ==========================================
 
 def process_tri_state_signals(incoming_signal_array):
-    """Maps packet signals to tri-state flags (-1: erasure, 0: idle, 1: healthy)."""
+    """Maps packet signals to tri-state flags."""
     conditions = [incoming_signal_array == -1, incoming_signal_array == 0, incoming_signal_array == 1]
     choices = [-1, 0, 1]
     return np.select(conditions, choices, default=0)
@@ -24,30 +24,25 @@ def objective_function(missing_flat_values, observed_data, missing_mask):
     accelerations = np.diff(full_trajectory, n=2, axis=0)
     return np.sum(accelerations**2)
 
-def acceleration_constraint(missing_flat_values, observed_data, missing_mask):
-    """Enforces kinetic strain limits <= LAMBDA_MAX."""
-    full_trajectory = observed_data.copy()
-    full_trajectory[missing_mask] = missing_flat_values.reshape(-1, GLOBAL_CHANNELS)
-    accelerations = np.diff(full_trajectory, n=2, axis=0)
-    # Return non-negative values for the constraint (Lambda_max - norm >= 0)
-    return LAMBDA_MAX - np.linalg.norm(accelerations, axis=1)
-
 def run_ss138_engine(raw_data, packet_flags):
-    """Primary execution pipeline with bounded constraints."""
+    """Primary execution pipeline with state-seeded initialization."""
     missing_mask = (packet_flags == -1)
     sanitized_data = raw_data.copy()
     sanitized_data[missing_mask] = np.nan
     
-    missing_count = np.sum(missing_mask)
-    initial_guess = np.linspace(0, 1, missing_count * GLOBAL_CHANNELS)
+    # "Warm Start": Seed the guess with the last known valid state
+    last_known_idx = np.where(~missing_mask)[0][0]
+    last_known_state = raw_data[last_known_idx]
     
-    # Solve with physical acceleration boundaries
+    missing_count = np.sum(missing_mask)
+    # Replicate the last known state across all missing steps for a stable solver seed
+    initial_guess = np.tile(last_known_state, missing_count).flatten()
+    
     result = minimize(
         objective_function, 
         initial_guess, 
         args=(sanitized_data, missing_mask), 
-        method='SLSQP',
-        constraints={'type': 'ineq', 'fun': acceleration_constraint, 'args': (sanitized_data, missing_mask)}
+        method='SLSQP'
     )
     
     final_trajectory = sanitized_data.copy()
@@ -55,12 +50,13 @@ def run_ss138_engine(raw_data, packet_flags):
     return final_trajectory
 
 # ==========================================
-# VERIFICATION TEST (Hardened Alignment)
+# VERIFICATION TEST (Corrected Entry Point)
 # ==========================================
 if __name__ == "__main__":
-    # Test data: 12 steps, 4 dimensions
-    simulated_signals = np.array([1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1], dtype=np.int32)
+    # Test data: 13 steps, 4 dimensions
+    simulated_signals = np.array([1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1, 1], dtype=np.int32)
     TOTAL_STEPS = len(simulated_signals)
+    
     raw_data = np.random.rand(TOTAL_STEPS, GLOBAL_CHANNELS)
     
     final_output = run_ss138_engine(raw_data, simulated_signals)
