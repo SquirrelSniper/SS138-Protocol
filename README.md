@@ -64,58 +64,72 @@ At the terminal 12th second of the Macro Horizon, the system runs a multi-variab
 
 ## 3. Mathematical Optimization and Mapping Logic
 
-### 3.1 Spatial Mapping: Multi-Dimensional Manifold Projection
-The mathematical foundation of the protocol replaces dynamic, unconstrained floating-point calculations with an unchanging, structured coordinate matrix. Incoming data payloads are mapped as multi-variable state vectors (S_k) within a 4-dimensional hyper-coordinate system (d = 4), structured as a column matrix:
-
-S_k = [ x_k,1 ; x_k,2 ; x_k,3 ; x_k,4 ]
-
+### ​3.1 Spatial Mapping: Multi-Dimensional Manifold Projection
+​The mathematical foundation of the protocol replaces dynamic, unconstrained floating-point calculations with an unchanging, structured coordinate matrix to prevent rounding errors. Incoming data payloads are mapped as multi-variable state vectors S_k within a 4-dimensional hyper-coordinate system (d = 4), structured as a column matrix:
+S_k = \begin{bmatrix} x_{k,1} \\ x_{k,2} \\ x_{k,3} \\ x_{k,4} \end{bmatrix}
 This 4-dimensional vector space provides the precise integer basis required to natively span the tracking coordinate system without accumulating periodic rounding errors or floating-point unit (FPU) noise over extended continuous runtimes.
+​The discrete-time state propagation across the temporal index k within a localized processing phase \Phi_p is governed by the time-varying state-space mapping: Sk+1 = AkSk + Bkuk+ EkOk
+Where A_k \in \mathbb{R}^{4 \times 4} is the system matrix, B_k is the control ingestion matrix, and E_k = \text{diag}(\epsilon_1, \epsilon_2, \epsilon_3, \epsilon_4) represents the tri-state erasure operator evaluating the register integrity flag array (\epsilon_i \in \{+1, 0, -1\}).
 
 ### 3.2 Convex Optimization and Kinetic Strain Minimization
-During an erasure event where data from Phase 2 and Phase 3 are lost, the system faces 12 unknown scalar variables (3 dropped steps multiplied by 4 vector components). To resolve this underdetermined search space without ambiguity, the gateway executes a localized quadratic optimization routine at the terminal 12th second. 
-
-The objective function minimizes the sum of the squared second-order differences across the entire 12-second observation window:
+​During an erasure event where tracking data from Phase 2 (\Phi_2) and Phase 3 (\Phi_3) are lost or flagged as degraded (\epsilon_i = -1), the system faces 12 unknown scalar variables (3 dropped steps multiplied by 4 vector components). To resolve this underdetermined search space without path ambiguity, the gateway executes a localized quadratic optimization routine at the terminal 12th second boundary.
+​The objective function minimizes the total kinetic strain variance—modeled as the sum of the squared second-order differences—across the entire 12-second observation window: 
+Where the second discrete derivative operator \Delta^2 S_k represents the localized acceleration vector computed as:
+\Delta^2 S_k = S_{k+2} - 2S_{k+1} + S_k
+Because this objective function J is strictly quadratic, the optimization path is completely convex. When bounded by the hard coordinate inputs of Phase 1 (\Phi_1) and Phase 4 (\Phi_4) acting as rigid Dirichlet boundary conditions, the optimization vise collapses the 9 open linear degrees of freedom down to exactly zero spatial ambiguity, converging on the single, unique global minimum representing the minimum-acceleration curve across the gap.
 
 Minimize: Sum from k=1 to 10 of || (Delta^2 * S_k) / (Delta t^2) ||^2
 
-Because this objective function is strictly quadratic, the optimization path is completely convex. When bounded by the hard coordinate inputs of Phase 1 and Phase 4, the optimization vise collapses the 9 open linear degrees of freedom down to exactly zero spatial ambiguity, converging on the single, unique global minimum representing the minimum-acceleration curve across the gap.
 
-### 3.3 Boundary-Value Bounding Envelopes
-To prevent the optimization engine from projecting erratic or unbounded solutions, the optimization loop is continuously locked inside a rigid box-constraint boundary envelope regularized by the tri-state logic parameters:
+### ​3.3 Boundary-Value Bounding Envelopes
+​To prevent the optimization engine from projecting erratic, unphysical, or unbounded solutions under adversarial conditions, the optimization loop is continuously locked inside a rigid box-constraint boundary envelope regularized by the tri-state logic parameters:\left\| S_{\text{candidate}} \right\|_\infty \le \Lambda_{\max}
+Where \Lambda_{\max} represents the maximum allowable physical acceleration threshold of the tracking plant. This constraint ensures that all reconstructed trajectories remain strictly within the physical limits of the system, rejecting localized network entropy and preventing malformed, out-of-bounds states from ever propagating past the gateway interface into downstream distributed ledgers.
 
-|| S_candidate || <= Lambda_max
+### 3.4 Canonical Dimension Reduction via Coordinate Projection
+Once the 4-dimensional state manifold is completely reconstructed and verified at the terminal 12th second, it passes through a projection matrix ($P_{12\to3}$) to map the data down to a 3-dimensional physical execution register ($d = 3$). To preserve strict dimensional homogeneity across different physical units, the state components are non-dimensionalized using characteristic scaling constants prior to projection, ensuring that position, velocity, and acceleration values are not directly summed without appropriate weighting.
 
-This constraint ensures that all reconstructed trajectories remain strictly within the physical and systemic limits of the tracking plant, rejecting localized network entropy and preventing malformed, out-of-bounds states from ever propagating past the gateway interface.
+The transformation is defined via a weighted projection matrix where each row applies a uniform, dimensionless scale to map the hyper-coordinate baseline cleanly into the physical execution space without unit conflicts.
 
-### 3.4 Canonical Dimension Reduction
-Once​3.4 Canonical Dimension Reduction via Coordinate Projection
-​Once the 4-dimensional state manifold is completely reconstructed and verified at the terminal 12th second, it passes through a projection matrix (P_{12\to3}) to map the data down to a 3-dimensional physical execution register (d = 3). To preserve strict dimensional homogeneity across different physical units, the state components are non-dimensionalized using characteristic scaling constants prior to projection, ensuring that position, velocity, and acceleration values are not directly summed without appropriate weighting.
-​The transformation is defined via a weighted projection matrix where each row applies a uniform, dimensionless scale to map the hyper-coordinate baseline cleanly into the physical execution space without unit conflicts.
+### 3.5 Discrete-Time Linear Time-Varying (LTV) State-Space Formulation
+To accurately account for the dynamic intervals caused by network transmission anomalies and packet arrival fluctuations, the gateway models the ingestion layer explicitly as a Discrete-Time Linear Time-Varying (LTV) dynamical system.
 
-​3.5 Discrete-Time Linear Time-Varying (LTV) State-Space Formulation
-​To accurately account for the dynamic intervals caused by network transmission anomalies and packet arrival fluctuations, the gateway models the ingestion layer explicitly as a Discrete-Time Linear Time-Varying (LTV) dynamical system.
-​The system state-transition and measurement equations are updated at every time index k to maintain absolute physical consistency:
-S_(k+1) = A_k * S_k + B_k * U_k + W_k
-Z_k     = C * S_k + V_k
+The system state-transition and measurement equations are updated at every time index $k$ to maintain absolute physical consistency:
+$$
+S_{k+1} = A_k S_k + B_k u_k + \omega_k
+$$
+Z_k = C S_k + v_k
+$$
+Where $\Delta t_k$ represents the true, variable elapsed time between incoming packets. The time-varying state-transition matrix $A_k$ and the physically scaled input coupling matrix $B_k$ are rigorously formulated as:
 
-Where \Delta t_k represents the true, variable elapsed time between incoming packets. The time-varying state-transition matrix A_k and the physically scaled input coupling matrix B_k are rigorously formulated as:
-      [ 1.0  Δt_k  0.5*Δt_k²  0.0       ]
-A_k = [ 0.0  1.0   Δt_k       0.0       ]
-      [ 0.0  0.0   1.0        0.0       ]
-      [ 0.0  0.0   0.0        e^(-γ_k)  ]
+$$
+A_k = \begin{bmatrix} 
+1.0 & \Delta t_k & 0.5\Delta t_k^2 & 0.0 \\ 
+0.0 & 1.0 & \Delta t_k & 0.0 \\ 
+0.0 & 0.0 & 1.0 & 0.0 \\ 
+0.0 & 0.0 & 0.0 & e^{(-\gamma \Delta t_k)} 
+\end{bmatrix}
+$$
 
-      [ 0.5*Δt_k²  0.0 ]
-B_k = [ Δt_k       0.0 ]
-      [ 1.0        0.0 ]
-      [ 0.0        1.0 ]
+$$
+B_k = \begin{bmatrix} 
+0.5\Delta t_k^2 & 0.0 \\ 
+\Delta t_k & 0.0 \\ 
+1.0 & 0.0 \\ 
+0.0 & 1.0 \\
+\end{bmatrix}
+$$
 
-C   = [ 1.0  0.0  0.0  0.0 ]
-    [ 0.0  1.0  0.0  0.0 ]
-    [ 0.0  0.0  1.0  0.0 ]
-    [ 0.0  0.0  0.0  1.0 ]
-By scaling the elements of B_k directly by \Delta t_k and \frac{1}{2}\Delta t_k^2, the physical behavior of the tracking plant remains completely invariant to changes in the network sampling rate, ensuring true kinematic continuity.
+$$
+C = \begin{bmatrix} 
+1.0 & 0.0 & 0.0 & 0.0 \\ 
+0.0 & 1.0 & 0.0 & 0.0 \\ 
+0.0 & 0.0 & 1.0 & 0.0 \\
+\end{bmatrix}
+$$
 
-3.6 Finite-Horizon Causality and Delayed Optimization Smoothing
+By scaling the elements of $B_k$ directly by $\Delta t_k$ and $\frac{1}{2}\Delta t_k^2$, the physical behavior of the tracking plant remains completely invariant to changes in the network sampling rate, ensuring true kinematic continuity.
+
+### 3.6 Finite-Horizon Causality and Delayed Optimization Smoothing
 ​The S138 protocol operates on a structured macro-horizon pipeline to ensure strict mathematical causality during network drops. When an erasure event occurs (State\ Logic = -1) within a 3-second localized phase, the gateway handles data ingestion through an asynchronous boundary buffer.
 ​Let \tau_k define the packet arrival delay at index k. The effective time step is adjusted dynamically:
 Δt_k = Δt_nominal + (τ_k - τ_(k-1))
@@ -123,6 +137,7 @@ Because calculating a central difference acceleration requires access to adjacen
 ​The optimization engine solves for the missing trajectory states simultaneously across the entire underdetermined window by setting the gradient of the kinetic strain cost function to zero:
 
 This structural batch configuration honors physical causality by matching the optimization window to the finite observation horizon. It successfully eliminates transport-layer retransmission overhead by resolving data gaps completely at the ingestion boundary before forwarding the verified data baseline to downstream network nodes.
+
 ## 4. Formal Technical System Claims
 
 ### Claim 1: A Deterministic Ingress Method for Multi-Variable State-Space Estimation
