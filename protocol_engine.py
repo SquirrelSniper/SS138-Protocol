@@ -12,7 +12,7 @@ LAMBDA_MAX = 5.0
 # ==========================================
 
 def process_tri_state_signals(incoming_signal_array):
-    """Maps packet signals to tri-state flags."""
+    """Maps packet signals to tri-state flags (-1: erasure, 0: idle, 1: healthy)."""
     conditions = [incoming_signal_array == -1, incoming_signal_array == 0, incoming_signal_array == 1]
     choices = [-1, 0, 1]
     return np.select(conditions, choices, default=0)
@@ -29,7 +29,7 @@ def acceleration_constraint(missing_flat_values, observed_data, missing_mask):
     full_trajectory = observed_data.copy()
     full_trajectory[missing_mask] = missing_flat_values.reshape(-1, GLOBAL_CHANNELS)
     accelerations = np.diff(full_trajectory, n=2, axis=0)
-    # Return non-negative values for the constraint
+    # Return non-negative values for the constraint (Lambda_max - norm >= 0)
     return LAMBDA_MAX - np.linalg.norm(accelerations, axis=1)
 
 def run_ss138_engine(raw_data, packet_flags):
@@ -55,9 +55,10 @@ def run_ss138_engine(raw_data, packet_flags):
     return final_trajectory
 
 # ==========================================
-# VERIFICATION TEST (Corrected Entry Point)
+# VERIFICATION TEST (Hardened Alignment)
 # ==========================================
 if __name__ == "__main__":
+    # Test data: 12 steps, 4 dimensions
     simulated_signals = np.array([1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1], dtype=np.int32)
     TOTAL_STEPS = len(simulated_signals)
     raw_data = np.random.rand(TOTAL_STEPS, GLOBAL_CHANNELS)
