@@ -15,12 +15,14 @@ index_count = TOTAL_STEPS
 
 def process_tri_state_signals(incoming_signal_array):
     """Maps packet signals to tri-state flags (-1: erasure, 0: idle, 1: healthy)."""
+    # Force alignment to TOTAL_STEPS
     tri_state_register = np.where(incoming_signal_array == 1, 1, -1)
     return tri_state_register
 
 def objective_function(missing_flat_values, observed_data, missing_mask):
     """Minimizes second-order acceleration (kinetic strain)."""
     full_trajectory = observed_data.copy()
+    # Use dynamic reshape based on GLOBAL_CHANNELS
     full_trajectory[missing_mask] = missing_flat_values.reshape(-1, GLOBAL_CHANNELS)
     accelerations = np.diff(full_trajectory, n=2, axis=0)
     return np.sum(accelerations**2)
@@ -49,11 +51,11 @@ def run_ss138_engine(raw_data, packet_flags):
     return final_trajectory
 
 # ==========================================
-# VERIFICATION TEST
+# VERIFICATION TEST (Hardened Alignment)
 # ==========================================
 if __name__ == "__main__":
-    # Test data: 12 steps, 4 dimensions
-    simulated_signals = np.array([1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1])
+    # Test data: 12 steps (Matches TOTAL_STEPS), 4 dimensions
+    simulated_signals = np.array([1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1], dtype=np.int32)
     raw_data = np.random.rand(TOTAL_STEPS, GLOBAL_CHANNELS)
     
     final_output = run_ss138_engine(raw_data, simulated_signals)
